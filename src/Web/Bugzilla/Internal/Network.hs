@@ -12,6 +12,7 @@ module Web.Bugzilla.Internal.Network
 , requestUrl
 , newBzRequest
 , sendBzRequest
+, bugzillaToken
 ) where
 
 import Blaze.ByteString.Builder (toByteString)
@@ -46,6 +47,9 @@ data BugzillaToken = BugzillaToken T.Text
 instance FromJSON BugzillaToken where
   parseJSON (Object v) = BugzillaToken <$> v .: "token"
   parseJSON _          = mzero
+
+bugzillaToken :: T.Text -> BugzillaToken
+bugzillaToken t = BugzillaToken t
 
 -- | A session for Bugzilla queries. Use 'anonymousSession' and
 -- 'loginSession', as appropriate, to create one.
