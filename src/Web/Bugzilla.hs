@@ -31,7 +31,7 @@ module Web.Bugzilla
 , BugzillaServer
 , BugzillaContext
 , BugzillaSession (..)
-, BugzillaToken
+, BugzillaToken (..)
 
   -- * Querying Bugzilla
 , searchBugs
