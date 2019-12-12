@@ -83,7 +83,9 @@ newBzRequest :: BugzillaSession -> [T.Text] -> QueryText -> Request
 newBzRequest session methodParts query =
     sslRequest {
       host        = TE.encodeUtf8 . bzServer . bzContext $ session,
-      path        = toByteString $ encodePathSegments $ "rest" : methodParts,
+      -- Hard-code "bugzilla" path component in here for now.
+      -- If that works, need to make extra path components a parameter/feature of contexts.
+      path        = toByteString $ encodePathSegments $ "bugzilla" : "rest" : methodParts,
       queryString = toByteString $ renderQueryText True queryWithToken
     }
   where
