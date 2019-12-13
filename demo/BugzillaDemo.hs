@@ -4,9 +4,16 @@
 import Control.Applicative
 import Control.Exception (bracket)
 import Control.Monad
+import Control.Monad.IO.Class (liftIO)
+import Data.Aeson (Value)
+import qualified Data.ByteString.Lazy.Char8 as L8
 import Data.Maybe
 import qualified Data.Text as T
 import Data.Time.Clock (diffUTCTime)
+import Network.Connection (TLSSettings(..))
+import Network.HTTP.Conduit
+import Network.HTTP.Client.TLS (mkManagerSettings)
+import Network.HTTP.Simple
 import System.Environment (getArgs)
 import System.IO
 
@@ -16,23 +23,25 @@ import Web.Bugzilla.Search
 main :: IO ()
 main = dispatch Nothing Nothing =<< getArgs
 
-dispatch :: Maybe UserEmail -> Maybe BugzillaServer -> [String] -> IO ()
-dispatch Nothing s ("--login" : user : as)    = dispatch (Just $ T.pack user) s as
+dispatch :: Maybe T.Text -> Maybe BugzillaServer -> [String] -> IO ()
+dispatch Nothing s ("--token" : token : as)   = dispatch (Just $ T.pack token) s as
 dispatch l Nothing ("--server" : server : as) = dispatch l (Just $ T.pack server) as
-dispatch l s ["--assigned-to", user]          = withBz l s $ doAssignedTo (T.pack user)
-dispatch l s ["--assigned-to-brief", user]    = withBz l s $ doAssignedToBrief (T.pack user)
-dispatch l s ["--requests", user]             = withBz l s $ doRequests (T.pack user)
-dispatch l s ["--history", bug, n]            = withBz l s $ doHistory (read bug) (read n)
+dispatch l s ["--assigned-to", user]          = withBzToken l s $ doAssignedTo (T.pack user)
+dispatch l s ["--assigned-to-brief", user]    = withBzToken l s $ doAssignedToBrief (T.pack user)
+dispatch l s ["--requests", user]             = withBzToken l s $ doRequests (T.pack user)
+dispatch l s ["--history", bug, n]            = withBzToken l s $ doHistory (read bug) (read n)
+dispatch _ _ ["--cheat"]                      = goCheat
 dispatch _ _ _                                = usage
 
 usage :: IO ()
 usage = hPutStrLn stderr "Connection options:"
      >> hPutStrLn stderr "  --server [domain name] - REQUIRED. The Bugzilla server to access."
-     >> hPutStrLn stderr "  --login [user email]   - The user to log in with."
+     -- >> hPutStrLn stderr "  --login [user email]   - The user to log in with."
+     >> hPutStrLn stderr "  --token [bz token]     - Token to access Bugzilla."
      >> hPutStrLn stderr ""
      >> hPutStrLn stderr "Bugzilla queries:"
      >> hPutStrLn stderr "  --assigned-to [user email] - List bugs assigned to the user."
-     >> hPutStrLn stderr "  --assigned-to [user email] - List bugs assigned to the user."
+     >> hPutStrLn stderr "  --assigned-to-brief [user email] - Briefly list bugs assigned to the user."
      >> hPutStrLn stderr "  --requests [user email]    - List requests for the user."
      >> hPutStrLn stderr "  --history [bug number] [n] - List the most recent 'n' changes to the bug."
 
@@ -53,7 +62,33 @@ withBz mLogin mServer f = do
                                             f $ anonymousSession ctx
       Nothing -> f $ anonymousSession ctx
                      
-  
+withBzToken :: Maybe T.Text -> Maybe BugzillaServer -> (BugzillaSession -> IO ()) -> IO ()
+withBzToken mTokText mServer f = do
+  let server = case mServer of
+                 Just s  -> s
+                 Nothing -> error "Please specify a server with '--server'"
+  withBugzillaContext server $ \ctx -> do
+    case mTokText of
+      Just tokText -> f $ LoginSession ctx $ BugzillaToken tokText
+      Nothing      -> f $ anonymousSession ctx
+
+goCheat :: IO ()
+goCheat = do
+    let settings = mkManagerSettings (TLSSettingsSimple True False False) Nothing
+    manager <- liftIO $ newManager settings
+    initReq <- parseRequest "https://gobugz.int.vertivco.com/bugzilla/rest/bug?token=344-O2JmisYSOJ&include_fields=id&f1=assigned_to&o1=equals&v1=Greg.Howard%40vertiv.com"
+    -- let req
+    --         = setRequestManager manager
+    --         $ initReq
+    -- response <- Network.HTTP.Simple.httpLbs req
+    putStrLn $ "GMSH: request: " ++ (show initReq)
+    response <- Network.HTTP.Conduit.httpLbs initReq manager
+
+    putStrLn $ "The status code was: " ++ show (getResponseStatusCode response)
+    print $ getResponseHeader "Content-Type" response
+    --L8.putStrLn $ getResponseBody response
+
+
 doAssignedTo :: UserEmail -> BugzillaSession -> IO ()
 doAssignedTo user session = do
     let search = AssignedToField .==. user
