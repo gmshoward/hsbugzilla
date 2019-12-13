@@ -21,23 +21,27 @@ import Web.Bugzilla
 import Web.Bugzilla.Search
 
 main :: IO ()
-main = dispatch Nothing Nothing =<< getArgs
+main = dispatch Nothing Nothing Nothing =<< getArgs
 
-dispatch :: Maybe T.Text -> Maybe BugzillaServer -> [String] -> IO ()
-dispatch Nothing s ("--token" : token : as)   = dispatch (Just $ T.pack token) s as
-dispatch l Nothing ("--server" : server : as) = dispatch l (Just $ T.pack server) as
-dispatch l s ["--assigned-to", user]          = withBzToken l s $ doAssignedTo (T.pack user)
-dispatch l s ["--assigned-to-brief", user]    = withBzToken l s $ doAssignedToBrief (T.pack user)
-dispatch l s ["--requests", user]             = withBzToken l s $ doRequests (T.pack user)
-dispatch l s ["--history", bug, n]            = withBzToken l s $ doHistory (read bug) (read n)
-dispatch _ _ ["--cheat"]                      = goCheat
-dispatch _ _ _                                = usage
+type RestPath = T.Text
+
+dispatch :: Maybe T.Text -> Maybe BugzillaServer -> Maybe RestPath -> [String] -> IO ()
+dispatch Nothing s r ("--token" : token : as)   = dispatch (Just $ T.pack token) s r as
+dispatch l Nothing r ("--server" : server : as) = dispatch l (Just $ T.pack server) r as
+dispatch l s Nothing ("--rest-path" : restPath : as) = dispatch l s (Just $ T.pack restPath) as
+dispatch l s r ["--assigned-to", user]          = withBzToken l s r $ doAssignedTo (T.pack user)
+dispatch l s r ["--assigned-to-brief", user]    = withBzToken l s r $ doAssignedToBrief (T.pack user)
+dispatch l s r ["--requests", user]             = withBzToken l s r $ doRequests (T.pack user)
+dispatch l s r ["--history", bug, n]            = withBzToken l s r $ doHistory (read bug) (read n)
+dispatch _ _ _ ["--cheat"]                      = goCheat
+dispatch _ _ _ _                                = usage
 
 usage :: IO ()
 usage = hPutStrLn stderr "Connection options:"
      >> hPutStrLn stderr "  --server [domain name] - REQUIRED. The Bugzilla server to access."
      -- >> hPutStrLn stderr "  --login [user email]   - The user to log in with."
      >> hPutStrLn stderr "  --token [bz token]     - Token to access Bugzilla."
+     >> hPutStrLn stderr "  --rest-path [path]     - Path to server's REST access point."
      >> hPutStrLn stderr ""
      >> hPutStrLn stderr "Bugzilla queries:"
      >> hPutStrLn stderr "  --assigned-to [user email] - List bugs assigned to the user."
@@ -45,29 +49,32 @@ usage = hPutStrLn stderr "Connection options:"
      >> hPutStrLn stderr "  --requests [user email]    - List requests for the user."
      >> hPutStrLn stderr "  --history [bug number] [n] - List the most recent 'n' changes to the bug."
 
-withBz :: Maybe UserEmail -> Maybe BugzillaServer -> (BugzillaSession -> IO ()) -> IO ()
-withBz mLogin mServer f = do
-  let server = case mServer of
-                 Just s  -> s
-                 Nothing -> error "Please specify a server with '--server'"
-  withBugzillaContext server $ \ctx ->
-    case mLogin of
-      Just login -> do hPutStrLn stderr "Enter password: "
-                       password <- T.pack <$> withEcho False getLine
-                       mSession <- loginSession ctx login password
-                       case mSession of
-                         Just session -> do hPutStrLn stderr "Login successful."
-                                            f session
-                         Nothing      -> do hPutStrLn stderr "Login failed. Falling back to anonymous session."
-                                            f $ anonymousSession ctx
-      Nothing -> f $ anonymousSession ctx
+-- withBz :: Maybe UserEmail -> Maybe BugzillaServer -> (BugzillaSession -> IO ()) -> IO ()
+-- withBz mLogin mServer f = do
+--   let server = case mServer of
+--                  Just s  -> s
+--                  Nothing -> error "Please specify a server with '--server'"
+--   withBugzillaContext server $ \ctx ->
+--     case mLogin of
+--       Just login -> do hPutStrLn stderr "Enter password: "
+--                        password <- T.pack <$> withEcho False getLine
+--                        mSession <- loginSession ctx login password
+--                        case mSession of
+--                          Just session -> do hPutStrLn stderr "Login successful."
+--                                             f session
+--                          Nothing      -> do hPutStrLn stderr "Login failed. Falling back to anonymous session."
+--                                             f $ anonymousSession ctx
+--       Nothing -> f $ anonymousSession ctx
                      
-withBzToken :: Maybe T.Text -> Maybe BugzillaServer -> (BugzillaSession -> IO ()) -> IO ()
-withBzToken mTokText mServer f = do
+withBzToken :: Maybe T.Text -> Maybe BugzillaServer -> Maybe RestPath -> (BugzillaSession -> IO ()) -> IO ()
+withBzToken mTokText mServer mRestPath f = do
   let server = case mServer of
                  Just s  -> s
                  Nothing -> error "Please specify a server with '--server'"
-  withBugzillaContext server $ \ctx -> do
+      restPath = case mRestPath of
+                   Just r  -> T.splitOn (T.pack "/") r
+                   Nothing -> []
+  withBugzillaContext server restPath $ \ctx -> do
     case mTokText of
       Just tokText -> f $ LoginSession ctx $ BugzillaToken tokText
       Nothing      -> f $ anonymousSession ctx
@@ -76,12 +83,12 @@ goCheat :: IO ()
 goCheat = do
     let settings = mkManagerSettings (TLSSettingsSimple True False False) Nothing
     manager <- liftIO $ newManager settings
-    initReq <- parseRequest "https://gobugz.int.vertivco.com/bugzilla/rest/bug?token=344-O2JmisYSOJ&include_fields=id&f1=assigned_to&o1=equals&v1=Greg.Howard%40vertiv.com"
+    initReq <- parseRequest "https://SERVER.NAME.HERE/PATH/COMPONENTS/HERE/rest/bug?token=XXX-YYYYYYYYYY&include_fields=id&f1=assigned_to&o1=equals&v1=me%40mycompany.com"
     -- let req
     --         = setRequestManager manager
     --         $ initReq
     -- response <- Network.HTTP.Simple.httpLbs req
-    putStrLn $ "GMSH: request: " ++ (show initReq)
+    putStrLn $ "request: " ++ (show initReq)
     response <- Network.HTTP.Conduit.httpLbs initReq manager
 
     putStrLn $ "The status code was: " ++ show (getResponseStatusCode response)

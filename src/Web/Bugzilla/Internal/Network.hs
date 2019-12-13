@@ -16,7 +16,7 @@ module Web.Bugzilla.Internal.Network
 ) where
 
 import Blaze.ByteString.Builder (toByteString)
-import Control.Applicative
+--import Control.Applicative
 import Control.Exception (Exception, throw)
 import Control.Monad (mzero)
 import Control.Monad.IO.Class (liftIO)
@@ -24,7 +24,7 @@ import Control.Monad.Trans.Resource (runResourceT)
 import Data.Aeson
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
-import Data.Default (def)
+--import Data.Default (def)
 import Data.Monoid ((<>))
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as TE
@@ -39,6 +39,7 @@ type BugzillaServer  = T.Text
 -- 'withBugzillaContext' to create one.
 data BugzillaContext = BugzillaContext
   { bzServer  :: BugzillaServer
+  , bzRestPath :: [T.Text]
   , bzManager :: Manager
   }
 
@@ -83,12 +84,12 @@ newBzRequest :: BugzillaSession -> [T.Text] -> QueryText -> Request
 newBzRequest session methodParts query =
     sslRequest {
       host        = TE.encodeUtf8 . bzServer . bzContext $ session,
-      -- Hard-code "bugzilla" path component in here for now.
-      -- If that works, need to make extra path components a parameter/feature of contexts.
-      path        = toByteString $ encodePathSegments $ "bugzilla" : "rest" : methodParts,
+      path        = toByteString $ encodePathSegments $ pathParts,
       queryString = toByteString $ renderQueryText True queryWithToken
     }
   where
+    restPathParts = bzRestPath . bzContext $ session
+    pathParts = restPathParts ++ ("rest" : methodParts)
     queryWithToken = case session of
                        AnonymousSession _                   -> query
                        LoginSession _ (BugzillaToken token) -> ("token", Just token) : query

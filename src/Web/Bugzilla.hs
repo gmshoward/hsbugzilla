@@ -84,11 +84,11 @@ import Web.Bugzilla.Internal.Types
 -- | Creates a new 'BugzillaContext', suitable for connecting to the
 --   provided server. You should try to reuse 'BugzillaContext's
 --   whenever possible, because creating them is expensive.
-newBugzillaContext :: BugzillaServer -> IO BugzillaContext
-newBugzillaContext server = do
+newBugzillaContext :: BugzillaServer -> [T.Text] -> IO BugzillaContext
+newBugzillaContext server restPath = do
   let settings = mkManagerSettings (TLSSettingsSimple True False False) Nothing
   manager <- liftIO $ newManager settings
-  return $ BugzillaContext server manager
+  return $ BugzillaContext server restPath manager
 
 -- | Closes the provided 'BugzillaContext'. Using it afterwards is an error.
 closeBugzillaContext :: BugzillaContext -> IO ()
@@ -96,8 +96,8 @@ closeBugzillaContext = closeManager . bzManager
 
 -- | Creates a 'BugzillaContext' and ensures that it will be closed
 --   automatically, even if an exception is thrown.
-withBugzillaContext :: BugzillaServer -> (BugzillaContext -> IO a) -> IO a
-withBugzillaContext server f = bracket (newBugzillaContext server) closeBugzillaContext f
+withBugzillaContext :: BugzillaServer -> [T.Text] -> (BugzillaContext -> IO a) -> IO a
+withBugzillaContext server restPathParts f = bracket (newBugzillaContext server restPathParts) closeBugzillaContext f
 
 -- | Attempts to create a logged-in 'BugzillaSession' using the
 --   provided username and password. Returns 'Nothing' if login
