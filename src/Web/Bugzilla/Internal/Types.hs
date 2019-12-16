@@ -59,7 +59,7 @@ type UserEmail    = T.Text
 --   changes to using 'Web.Bugzilla.getHistory'. To get a human-readable name for
 --   a field, use 'fieldName'.
 data Field a where
-  AliasField                    :: Field T.Text           -- Alias
+  AliasField                    :: Field [T.Text]         -- Alias(es)
   AssignedToField               :: Field UserEmail        -- Assignee
   AttachmentCreatorField        :: Field UserEmail        -- Attachment creator
   AttachmentDataField           :: Field T.Text           -- Attachment data
@@ -335,7 +335,7 @@ instance FromJSON Flag where
 -- | A Bugzilla bug.
 data Bug = Bug
   { bugId                  :: !BugId
-  , bugAlias               :: Maybe T.Text
+  , bugAlias               :: [T.Text]
   , bugAssignedTo          :: UserEmail
   , bugAssignedToDetail    :: User
   , bugBlocks              :: [BugId]
@@ -376,7 +376,7 @@ data Bug = Bug
 instance FromJSON Bug where
   parseJSON (Object v) =
       Bug <$> v .:  "id"
-          <*> v .:? "alias"
+          <*> v .: "alias"
           <*> v .: "assigned_to"
           <*> v .: "assigned_to_detail"
           <*> v .: "blocks"
@@ -602,7 +602,7 @@ instance FromJSON Change where
   parseJSON (Object v) = do
     changedField <- v .: "field_name"
     case changedField of
-      "alias"                  -> TextFieldChange AliasField <$> parseModification v
+      "alias"                  -> ListFieldChange AliasField <$> parseModification v
       "assigned_to"            -> TextFieldChange AssignedToField <$> parseModification v
       "attachments.submitter"  -> TextFieldChange AttachmentCreatorField <$> parseModification v
       "attach_data.thedata"    -> TextFieldChange AttachmentDataField <$> parseModification v

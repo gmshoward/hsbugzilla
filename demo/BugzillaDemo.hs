@@ -99,7 +99,7 @@ goCheat = do
 doAssignedTo :: UserEmail -> BugzillaSession -> IO ()
 doAssignedTo user session = do
     let search = AssignedToField .==. user
-    bugs <- searchBugs session search
+    bugs <- searchBugsWithLimit session 10 0 search
     mapM_ showBug bugs
   where
     showBug (Bug {..}) = putStrLn $ show bugId ++ ": " ++ show bugSummary
@@ -109,7 +109,7 @@ doAssignedTo user session = do
 doAssignedToBrief :: UserEmail -> BugzillaSession -> IO ()
 doAssignedToBrief user session = do
     let search = AssignedToField .==. user
-    bugs <- searchBugs' session search
+    bugs <- searchBugsWithLimit' session 10 0 search
     mapM_ print bugs
 
 doRequests :: UserEmail -> BugzillaSession -> IO ()
